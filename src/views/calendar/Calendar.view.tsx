@@ -2,33 +2,33 @@ import React, { useEffect, useState } from "react";
 import Calendar from "react-calendar";
 import "./calendar.scss";
 import styles from "./calendar.module.scss";
-import { isSameDay } from "./services/same-day";
-import { storage } from "../../services/storage";
+import { isSameDay } from "../../services/same-day";
 import Modal from "react-modal";
 import Toggle from "react-toggle";
+import { Period, PeriodManager } from "../../services/periodManger";
 
 Modal.setAppElement("#root");
 
-const PERIOD_DATES_STORAGE_KEY = "PERIOD_DATES";
 export function CalendarView() {
-    const [periodDates, setPeriodDates] = useState<Date[]>([]);
+    const [periods, setPeriods] = useState<Period[]>([]);
     const [selectedDate, setSelectedDate] = useState<Date>();
+    const [periodManager] = useState(() =>
+        PeriodManager.create("period_manager")
+    );
 
     const [modalOpen, setModalOpen] = useState(false);
 
-    // get period dates from storage on first mount
+    // hook to attach event handlers for periods
     useEffect(() => {
-        storage.load<Date[]>(PERIOD_DATES_STORAGE_KEY).then((dates) => {
-            if (dates) {
-                setPeriodDates(dates);
-            }
-        });
-    }, []);
-
-    //save period dates to storage everytime the period dates change
-    useEffect(() => {
-        storage.save(PERIOD_DATES_STORAGE_KEY, periodDates);
-    }, [periodDates]);
+        const handlePeriodsChange = (periods: Period[]) => {
+            const periodDates = periods.map((period) => ({ ...period }));
+            setPeriods(periodDates);
+        };
+        periodManager.on("change", handlePeriodsChange);
+        return () => {
+            periodManager.off("change", handlePeriodsChange);
+        };
+    }, [periodManager]);
 
     const openModal = (date: Date) => {
         setSelectedDate(date);
@@ -49,8 +49,8 @@ export function CalendarView() {
                 value={new Date()}
                 tileClassName={({ date, view }) => {
                     if (view === "month") {
-                        const match = periodDates.some((_date) =>
-                            isSameDay(date, _date)
+                        const match = periods.some((period) =>
+                            isSameDay(date, period.date)
                         );
                         return match ? styles.periods : "";
                     }
@@ -75,29 +75,23 @@ export function CalendarView() {
                                 ).getFullYear()}`}</span>
                                 <Toggle
                                     className={styles.toggle}
-                                    defaultChecked={periodDates.some((_dates) =>
-                                        isSameDay(selectedDate, _dates)
+                                    defaultChecked={periods.some((period) =>
+                                        isSameDay(selectedDate, period.date)
                                     )}
                                     onChange={(e) => {
                                         const selected = e.target.checked;
+
                                         if (selected) {
-                                            setPeriodDates([
-                                                ...periodDates,
-                                                selectedDate
-                                            ]);
+                                            periodManager.addPeriod(
+                                                selectedDate,
+                                                ""
+                                            );
                                         } else {
-                                            setPeriodDates(
-                                                periodDates.filter(
-                                                    (_date) =>
-                                                        !isSameDay(
-                                                            _date,
-                                                            selectedDate
-                                                        )
-                                                )
+                                            periodManager.removePeriod(
+                                                selectedDate
                                             );
                                         }
                                     }}
-                                    // onChange={this.handleAubergineChange}
                                 />
                             </label>
                         </div>
